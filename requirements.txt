@@ -19,3 +19,4 @@ Pillow
 matplotlib
 yt-dlp
 beautifulsoup4
+isodate
