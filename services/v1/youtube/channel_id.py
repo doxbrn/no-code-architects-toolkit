@@ -1,8 +1,9 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from typing import Optional
 
-def get_channel_id_from_url(youtube_url: str) -> str | None:
+def get_channel_id_from_url(youtube_url: str) -> Optional[str]:
     """
     Fetches a YouTube page and extracts the channel ID.
 
