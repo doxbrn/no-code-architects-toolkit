@@ -1,9 +1,14 @@
 from typing import Dict, Any
+import os
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-# API key fornecida
-YOUTUBE_API_KEY = "AIzaSyCd-47bEKqcnhLLEtP8kzCcDEzWYd195Eo"
+# Carrega a chave da API do YouTube a partir da variável de ambiente
+# Fallback para a chave fixa apenas se a variável de ambiente não estiver disponível
+YOUTUBE_API_KEY = os.environ.get(
+    "YOUTUBE_API_KEY", 
+    "AIzaSyCd-47bEKqcnhLLEtP8kzCcDEzWYd195Eo"
+)
 
 def get_videos_by_channel_id(
     channel_id: str, 
