@@ -26,7 +26,7 @@ def parse_iso8601_duration(duration_str: str) -> int:
 def get_videos_by_channel_id(
     channel_id: str, 
     max_results: int = 500, 
-    # order_by: str = 'viewCount' # No longer used for API ordering, kept for signature consistency if route sends it
+    **kwargs # Aceita argumentos extras como order_by e os ignora
 ) -> Dict[str, Any]:
     """
     Obtém informações de vídeos de um canal do YouTube usando a playlist de uploads.
@@ -35,12 +35,14 @@ def get_videos_by_channel_id(
     Args:
         channel_id: O ID do canal do YouTube.
         max_results: Número máximo de vídeos para retornar (default 500).
-        # order_by: Não é mais usado para consulta à API, ordenação posterior no Airtable.
+        **kwargs: Permite que argumentos extras (como order_by da rota) sejam passados mas não usados.
 
     Returns:
         Um dicionário contendo informações do canal e seus vídeos formatados
         para Airtable.
     """
+    # order_by = kwargs.get('order_by', 'viewCount') # Se precisasse usar, seria assim
+    logger.info(f"Chamada a get_videos_by_channel_id para channel_id: {channel_id}, max_results: {max_results}. Argumentos extras ignorados: {kwargs}")
     try:
         youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
 
