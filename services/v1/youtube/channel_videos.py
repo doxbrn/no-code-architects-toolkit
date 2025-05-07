@@ -26,30 +26,29 @@ def parse_iso8601_duration(duration_str: str) -> int:
 def get_videos_by_channel_id(
     channel_id: str, 
     max_results: int = 500, 
-    order_by: str = 'viewCount'
+    # order_by: str = 'viewCount' # No longer used for API ordering, kept for signature consistency if route sends it
 ) -> Dict[str, Any]:
     """
-    Obtém informações de vídeos de um canal do YouTube.
+    Obtém informações de vídeos de um canal do YouTube usando a playlist de uploads.
     Retorna dados do canal e uma lista de vídeos formatada para Airtable.
 
     Args:
         channel_id: O ID do canal do YouTube.
         max_results: Número máximo de vídeos para retornar (default 500).
-        order_by: Critério de ordenação (default 'viewCount').
+        # order_by: Não é mais usado para consulta à API, ordenação posterior no Airtable.
 
     Returns:
-        Um dicionário contendo informações do canal e seus vídeos formatados para Airtable.
+        Um dicionário contendo informações do canal e seus vídeos formatados
+        para Airtable.
     """
     try:
-        # Inicializar o serviço YouTube API
         youtube = build('youtube', 'v3', developerKey=YOUTUBE_API_KEY)
-        
-        # Obter informações do canal
+
         channel_response = youtube.channels().list(
             part='snippet,statistics,brandingSettings,contentDetails',
             id=channel_id
         ).execute()
-        
+
         if not channel_response.get('items'):
             logger.warning(f"Canal não encontrado: {channel_id}")
             return {
@@ -57,137 +56,171 @@ def get_videos_by_channel_id(
                 "channel_id": channel_id,
                 "airtable_videos": []
             }
-        
+
         channel_info = channel_response['items'][0]
-        # Basic channel data
+        uploads_playlist_id = channel_info.get('contentDetails', {}).get('relatedPlaylists', {}).get('uploads')
+
+        if not uploads_playlist_id:
+            logger.warning(f"Playlist de uploads não encontrada para o canal: {channel_id}")
+            return {
+                "error": "Playlist de uploads não encontrada para o canal",
+                "channel_id": channel_id,
+                "airtable_videos": []
+            }
+        
+        logger.info(f"Playlist de uploads para {channel_id}: {uploads_playlist_id}")
+
         channel_data_response = {
             "channel_id": channel_id,
             "title": channel_info['snippet']['title'],
             "description": channel_info['snippet']['description'],
             "custom_url": channel_info['snippet'].get('customUrl', ''),
             "published_at": channel_info['snippet']['publishedAt'],
-            "thumbnail_url": channel_info['snippet']['thumbnails']['high']['url'],
+            "thumbnail_url":
+                channel_info['snippet']['thumbnails']['high']['url'],
             "country": channel_info['snippet'].get('country', ''),
             "statistics": channel_info['statistics'],
-            "banner_url": channel_info.get('brandingSettings', {})
-                          .get('image', {})
+            "banner_url": channel_info.get('brandingSettings', {})\
+                          .get('image', {})\
                           .get('bannerExternalUrl', ''),
             "total_videos_fetched": 0,
             "total_pages_fetched": 0,
             "pagination_stop_reason": "",
             "airtable_videos": [] # Formatted for Airtable
         }
-        
-        videos_details_list = [] # To store detailed video objects before sorting
+
+        collected_video_ids = []
         next_page_token = None
         page_count = 0
-        total_fetched_ids = 0
+        total_fetched_ids_count = 0
         
-        # Max 10 pages for search to get top N by viewcount (500 videos)
-        # The API might stop returning pages earlier for viewCount order on large channels
-        max_pages_to_query = (max_results + 49) // 50 # Calculate pages needed, up to 10
-        max_pages_to_query = min(max_pages_to_query, 10) 
+        max_pages_to_query = (max_results + 49) // 50
+        max_pages_to_query = min(max_pages_to_query, 10) # Limit to 10 pages (500 videos) as a safeguard
 
-        logger.info(f"Iniciando busca de vídeos para o canal {channel_id}. Max results: {max_results}, Order: {order_by}, Max pages: {max_pages_to_query}")
+        logger.info(
+            f"Iniciando busca de vídeos da playlist de uploads ({uploads_playlist_id}) "
+            f"para o canal {channel_id}. Max results: {max_results}, Max pages: {max_pages_to_query}"
+        )
 
-        while total_fetched_ids < max_results and page_count < max_pages_to_query:
-            request_size = min(50, max_results - total_fetched_ids)
-            if request_size <=0: # Should not happen if loop condition is correct
+        while total_fetched_ids_count < max_results and page_count < max_pages_to_query:
+            request_size = min(50, max_results - total_fetched_ids_count)
+            if request_size <= 0:
                 break
 
-            logger.debug(f"Buscando IDs - Página {page_count + 1}, maxResults: {request_size}, token: {next_page_token}")
-            search_response = youtube.search().list(
-                part='id',
-                channelId=channel_id,
-                maxResults=request_size, 
-                order=order_by,
-                type='video',
+            logger.debug(
+                f"Buscando playlistItems - Página {page_count + 1}, "
+                f"maxResults: {request_size}, token: {next_page_token}"
+            )
+            playlist_items_response = youtube.playlistItems().list(
+                part='contentDetails', # We only need contentDetails.videoId here
+                playlistId=uploads_playlist_id,
+                maxResults=request_size,
                 pageToken=next_page_token
             ).execute()
-            
-            page_count += 1
-            current_video_ids = [item['id']['videoId'] for item in search_response.get('items', [])]
-            
-            if not current_video_ids:
-                logger.info(f"Nenhum ID de vídeo encontrado na página {page_count} da busca. Parando.")
-                channel_data_response["pagination_stop_reason"] = f"API returned no video IDs on search page {page_count}."
-                break
-            
-            logger.debug(f"Encontrados {len(current_video_ids)} IDs de vídeos na página de busca {page_count}.")
-            
-            # Get full details for these video IDs
-            video_details_response = youtube.videos().list(
-                part='snippet,contentDetails,statistics',
-                id=','.join(current_video_ids)
-            ).execute()
-            
-            for item in video_details_response.get('items', []):
-                if total_fetched_ids >= max_results:
-                    break
-                videos_details_list.append(item)
-                total_fetched_ids += 1
-            
-            logger.debug(f"Detalhes de {len(video_details_response.get('items', []))} vídeos obtidos. Total de IDs processados até agora: {total_fetched_ids}")
 
-            next_page_token = search_response.get('nextPageToken')
-            if not next_page_token:
-                logger.info(f"Não há mais páginas de busca após a página {page_count}. Parando.")
-                channel_data_response["pagination_stop_reason"] = f"API returned no next page token for search after page {page_count}."
+            page_count += 1
+            current_page_video_ids = [
+                item['contentDetails']['videoId']
+                for item in playlist_items_response.get('items', [])
+                if item.get('contentDetails') and item['contentDetails'].get('videoId')
+            ]
+
+            if not current_page_video_ids:
+                s_reason = f"API returned no video IDs from playlistItems on page {page_count}."
+                logger.info(f"Nenhum ID de vídeo na página {page_count} da playlist. {s_reason}")
+                channel_data_response["pagination_stop_reason"] = s_reason
                 break
-            if total_fetched_ids >= max_results:
-                logger.info(f"Limite de {max_results} vídeos atingido ao buscar IDs. Parando.")
-                channel_data_response["pagination_stop_reason"] = f"max_results ({max_results}) reached during ID fetching."
+            
+            collected_video_ids.extend(current_page_video_ids)
+            total_fetched_ids_count = len(collected_video_ids)
+
+            logger.debug(
+                f"Encontrados {len(current_page_video_ids)} IDs de vídeos na "
+                f"página {page_count} da playlist. Total de IDs coletados: {total_fetched_ids_count}."
+            )
+
+            next_page_token = playlist_items_response.get('nextPageToken')
+            if not next_page_token:
+                s_reason = f"API no next page token for playlistItems after page {page_count}."
+                logger.info(f"Não há mais páginas na playlist após {page_count}. {s_reason}")
+                channel_data_response["pagination_stop_reason"] = s_reason
+                break
+            if total_fetched_ids_count >= max_results:
+                s_reason = f"max_results ({max_results}) reached during playlist ID fetching."
+                logger.info(f"Limite de {max_results} vídeos atingido. {s_reason}")
+                channel_data_response["pagination_stop_reason"] = s_reason
                 break
         
-        if not channel_data_response["pagination_stop_reason"] and total_fetched_ids < max_results:
-             channel_data_response["pagination_stop_reason"] = "Loop finished (likely page cap or API limit for the query)."
+        if not channel_data_response["pagination_stop_reason"] and \
+           total_fetched_ids_count < max_results:
+            channel_data_response["pagination_stop_reason"] = (
+                "Loop finished (max pages reached or API limit for playlistItems)."
+            )
 
-        # Sort all fetched videos by view_count if that was the order
-        # Note: The search API should have already ordered them, but we re-sort
-        # in case we switch to playlistItems later or for absolute certainty.
-        if order_by == 'viewCount':
-            videos_details_list.sort(key=lambda v: int(v.get('statistics', {}).get('viewCount', 0)), reverse=True)
+        videos_details_list = []
+        if collected_video_ids:
+            # Fetch details for all collected video IDs in batches of 50
+            for i in range(0, len(collected_video_ids), 50):
+                batch_ids = collected_video_ids[i:i + 50]
+                logger.debug(f"Buscando detalhes para lote de {len(batch_ids)} IDs de vídeo.")
+                video_details_response = youtube.videos().list(
+                    part='snippet,contentDetails,statistics',
+                    id=','.join(batch_ids)
+                ).execute()
+                videos_details_list.extend(video_details_response.get('items', []))
 
-        # Now, format for Airtable
         airtable_formatted_videos = []
-        for item in videos_details_list: # Iterate over the potentially sorted and limited list
+        for item in videos_details_list:
             video_data_for_airtable = {
-                "Video_ID": item['id'], # Primary Field in Airtable: fields.VideoID (fldbPdjT2QfwVFT6g)
-                "Channel_ID_Ref": channel_id, # New field: Channel_ID_Ref (fldC0OaeIQsT2TCmS)
-                "Title": item['snippet']['title'], # Airtable: fields.Title (fldGHKuZ3gFC8O20s)
-                "Description": item['snippet']['description'], # Airtable: fields.Description (fldhHfOlvGCbfYaeD)
-                "Published_At_Formatted": item['snippet']['publishedAt'], # New: Published_At_Formatted (dateTime). Store as ISO string.
-                "Thumbnail_URL_Formatted": item['snippet']['thumbnails'].get('high', {}).get('url') or item['snippet']['thumbnails'].get('default', {}).get('url'), # New: Thumbnail_URL_Formatted (flduc8egch4qf3SBj)
-                "Duration_Seconds": parse_iso8601_duration(item['contentDetails']['duration']), # Airtable: fields.DurationSeconds (fld0NYryE7Zjp6rDa)
-                "View_Count": int(item.get('statistics', {}).get('viewCount', 0)), # Airtable: fields.ViewCount (fld0xre6jSfHbNGgs)
-                "Like_Count": int(item.get('statistics', {}).get('likeCount', 0)), # New: Like_Count (fldXugCfOh6p6lTdc)
-                "Comment_Count": int(item.get('statistics', {}).get('commentCount', 0)), # New: Comment_Count (fldd4dBX0FV3WNR1A)
-                "Tags_List": ", ".join(item['snippet'].get('tags', [])), # New: Tags_List (fldZalcVklqW1Uxxy)
-                "Category_ID_YT": item['snippet']['categoryId'], # New: Category_ID_YT (fldJMw0x1DM9LIX5b)
-                # Existing Airtable fields not directly mapped from this specific video item:
-                # fields.ChannelName (fldiu6lxgC7NbQXQf) - could be channel_info['snippet']['title']
-                # fields.UploadDate (fldDqPsEeCsBVjbaX) - We're using Published_At_Formatted
+                "Video_ID": item['id'],
+                "Channel_ID_Ref": channel_id,
+                "Title": item['snippet']['title'],
+                "Description": item['snippet']['description'],
+                "Published_At_Formatted": item['snippet']['publishedAt'],
+                "Thumbnail_URL_Formatted":
+                    item['snippet']['thumbnails'].get('high', {})\
+                    .get('url') or \
+                    item['snippet']['thumbnails'].get('default', {})\
+                    .get('url'),
+                "Duration_Seconds":
+                    parse_iso8601_duration(item['contentDetails']['duration']),
+                "View_Count":
+                    int(item.get('statistics', {}).get('viewCount', 0)),
+                "Like_Count":
+                    int(item.get('statistics', {}).get('likeCount', 0)),
+                "Comment_Count":
+                    int(item.get('statistics', {}).get('commentCount', 0)),
+                "Tags_List":
+                    ", ".join(item['snippet'].get('tags', [])),
+                "Category_ID_YT": item['snippet']['categoryId'],
             }
             airtable_formatted_videos.append(video_data_for_airtable)
 
         channel_data_response['airtable_videos'] = airtable_formatted_videos
-        channel_data_response['total_videos_fetched'] = len(airtable_formatted_videos) # Actual number of videos in the list
+        channel_data_response['total_videos_fetched'] = len(airtable_formatted_videos)
         channel_data_response['total_pages_fetched'] = page_count
-        
+
         logger.info(
-            f"Finalizados: {len(airtable_formatted_videos)} vídeos formatados para Airtable do canal {channel_id} após {page_count} páginas de busca. Razão da parada: {channel_data_response['pagination_stop_reason']}"
+            f"Finalizados: {len(airtable_formatted_videos)} vídeos formatados "
+            f"para Airtable do canal {channel_id} após {page_count} páginas "
+            f"da playlist. Razão da parada: "
+            f"{channel_data_response['pagination_stop_reason']}"
         )
         return channel_data_response
-        
+
     except HttpError as e:
-        logger.error(f"Erro na API do YouTube para o canal {channel_id}: {str(e)}")
+        err_content = e.response.get('content', b'').decode() if e.response else str(e)
+        logger.error(f"Erro na API do YouTube para o canal {channel_id}: {err_content}")
         return {
-            "error": f"Erro na API do YouTube: {e.response.get('content', {}).decode() if e.response else str(e)}",
+            "error": f"Erro na API do YouTube: {err_content}",
             "channel_id": channel_id,
             "airtable_videos": []
         }
     except Exception as e:
-        logger.error(f"Erro geral ao processar dados para o canal {channel_id}: {str(e)}", exc_info=True)
+        logger.error(
+            f"Erro geral ao processar dados para o canal {channel_id}: {str(e)}",
+            exc_info=True
+        )
         return {
             "error": f"Erro ao processar dados: {str(e)}",
             "channel_id": channel_id,
