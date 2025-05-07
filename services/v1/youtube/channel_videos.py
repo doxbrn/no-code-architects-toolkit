@@ -166,35 +166,62 @@ def get_videos_by_channel_id(
                 batch_ids = collected_video_ids[i:i + 50]
                 logger.debug(f"Buscando detalhes para lote de {len(batch_ids)} IDs de vídeo.")
                 video_details_response = youtube.videos().list(
-                    part='snippet,contentDetails,statistics',
+                    part='snippet,contentDetails,statistics,status',
                     id=','.join(batch_ids)
                 ).execute()
                 videos_details_list.extend(video_details_response.get('items', []))
 
         airtable_formatted_videos = []
         for item in videos_details_list:
+            snippet = item.get('snippet', {})
+            content_details = item.get('contentDetails', {})
+            statistics = item.get('statistics', {})
+            status = item.get('status', {})
+
             video_data_for_airtable = {
-                "Video_ID": item['id'],
+                "Video_ID": item.get('id'),
                 "Channel_ID_Ref": channel_id,
-                "Title": item['snippet']['title'],
-                "Description": item['snippet']['description'],
-                "Published_At_Formatted": item['snippet']['publishedAt'],
+                "Title": snippet.get('title'),
+                "Description": snippet.get('description'),
+                "Published_At_Formatted": snippet.get('publishedAt'),
                 "Thumbnail_URL_Formatted":
-                    item['snippet']['thumbnails'].get('high', {})\
+                    snippet.get('thumbnails', {}).get('high', {})\
                     .get('url') or \
-                    item['snippet']['thumbnails'].get('default', {})\
+                    snippet.get('thumbnails', {}).get('default', {})\
                     .get('url'),
                 "Duration_Seconds":
-                    parse_iso8601_duration(item['contentDetails']['duration']),
+                    parse_iso8601_duration(content_details.get('duration', 'PT0S')),
                 "View_Count":
-                    int(item.get('statistics', {}).get('viewCount', 0)),
+                    int(statistics.get('viewCount', 0)),
                 "Like_Count":
-                    int(item.get('statistics', {}).get('likeCount', 0)),
+                    int(statistics.get('likeCount', 0)),
                 "Comment_Count":
-                    int(item.get('statistics', {}).get('commentCount', 0)),
+                    int(statistics.get('commentCount', 0)),
                 "Tags_List":
-                    ", ".join(item['snippet'].get('tags', [])),
-                "Category_ID_YT": item['snippet']['categoryId'],
+                    ", ".join(snippet.get('tags', [])),
+                "Category_ID_YT": snippet.get('categoryId'),
+                
+                # Novos campos do snippet
+                "Channel_Title_In_Video": snippet.get('channelTitle'),
+                "Live_Broadcast_Content": snippet.get('liveBroadcastContent'),
+                "Default_Language": snippet.get('defaultLanguage'),
+                "Default_Audio_Language": snippet.get('defaultAudioLanguage'),
+                
+                # Novos campos do contentDetails
+                "Dimension": content_details.get('dimension'),
+                "Definition": content_details.get('definition'),
+                "Has_Caption": str(content_details.get('caption', 'false')).lower(), # Convertendo para string 'true'/'false'
+                "Is_Licensed_Content": str(content_details.get('licensedContent', False)).lower(),
+                "Projection": content_details.get('projection'),
+                
+                # Novos campos do status
+                "Upload_Status": status.get('uploadStatus'),
+                "Privacy_Status": status.get('privacyStatus'),
+                "License": status.get('license'),
+                "Is_Embeddable": str(status.get('embeddable', False)).lower(),
+                "Are_Public_Stats_Viewable": str(status.get('publicStatsViewable', False)).lower(),
+                "Made_For_Kids": str(status.get('madeForKids', False)).lower(),
+                "Publish_At_Schedule": status.get('publishAt')
             }
             airtable_formatted_videos.append(video_data_for_airtable)
 
