@@ -56,7 +56,8 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
     
     try:
         # Calculate zoom formula
-        zoom_formula = f'min(zoom+{(zoom_end-zoom_start)/duration}*on/fps,{zoom_end})'
+        increment_per_second = (zoom_end - zoom_start) / duration
+        zoom_formula = f'min(zoom + {increment_per_second}*t, {zoom_end})'
         
         # Command to generate video with zoom effect using ffmpeg
         cmd = [
