@@ -239,6 +239,7 @@ def create_app():
     from routes.v1.toolkit.jobs_status import v1_toolkit_jobs_status_bp
     from routes.v1.youtube.channel_id import youtube_channel_id_bp
     from routes.v1.youtube.channel_videos import youtube_channel_videos_bp
+    from routes.v1.video.create_zoom_video import v1_video_create_zoom_video_bp
 
     app.register_blueprint(v1_ffmpeg_compose_bp)
     app.register_blueprint(v1_media_transcribe_bp)
@@ -269,6 +270,7 @@ def create_app():
     app.register_blueprint(v1_toolkit_jobs_status_bp)
     app.register_blueprint(youtube_channel_id_bp)
     app.register_blueprint(youtube_channel_videos_bp)
+    app.register_blueprint(v1_video_create_zoom_video_bp)
 
     return app
 
