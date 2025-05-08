@@ -55,22 +55,27 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         zoom_end = 1.15
     
     try:
-        # Calculate zoom formula
-        increment_per_second = (zoom_end - zoom_start) / duration
-        zoom_formula = f'min(zoom + {increment_per_second}*t, {zoom_end})'
-        
+        fps = 30
+        total_frames = int(duration * fps) # Ensure integer for duration
+
+        # Define zoom based on frame number 'on' and total frames 'N'
+        # Linearly interpolate between zoom_start and zoom_end over N frames
+        # Escape single quotes for the shell/subprocess
+        zoom_formula = f'lerp({zoom_start},{zoom_end},on/N)'
+
         # Command to generate video with zoom effect using ffmpeg
         cmd = [
             'ffmpeg',
             '-loop', '1',           # Loop a single image
             '-i', image_path,       # Input image
-            '-t', str(duration),    # Duration
-            '-filter_complex', f'zoompan=z:\'{zoom_formula}\':d=1:s=1920x1080:fps=30',
-            '-c:v', 'libx264',      # Video codec
-            '-pix_fmt', 'yuv420p',  # Pixel format for compatibility
-            '-crf', '23',           # Quality factor
-            '-preset', 'medium',    # Encoding speed/quality balance
-            output_path             # Output path
+            # Use -vf for simple filtergraph, set zoompan duration 'd'
+            '-vf', f"zoompan=z=\'{zoom_formula}\':d={total_frames}:s=1920x1080:fps={fps}",
+            '-t', str(duration),    # Set output duration explicitly
+            '-c:v', 'libx264',
+            '-pix_fmt', 'yuv420p',
+            '-crf', '23',
+            '-preset', 'medium',
+            output_path
         ]
         
         logger.info(f"Running FFmpeg command: {' '.join(cmd)}")
