@@ -58,18 +58,21 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         fps = 30
         total_frames = int(duration * fps) # Ensure integer for duration
 
-        # Define zoom based on frame number 'on' and total frames 'N'
-        # Linearly interpolate between zoom_start and zoom_end over N frames
-        # Escape single quotes for the shell/subprocess
-        zoom_formula = f'lerp({zoom_start},{zoom_end},on/{total_frames})'
+        # Calculate zoom increment per frame for smooth and natural transition
+        speed = (zoom_end - zoom_start) / total_frames
+
+        # Build filter string: smooth zoom, fps, and scaling
+        filter_str = (
+            f"zoompan=z='if(eq(on,0),{zoom_start},zoom+{speed})':"
+            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},scale=1920:1080"
+        )
 
         # Command to generate video with zoom effect using ffmpeg
         cmd = [
             'ffmpeg',
             '-loop', '1',           # Loop a single image
             '-i', image_path,       # Input image
-            # Use -vf for simple filtergraph, set zoompan duration 'd'
-            '-vf', f"zoompan=z=\'{zoom_formula}\':d={total_frames}:s=1920x1080:fps={fps}",
+            '-vf', filter_str,
             '-t', str(duration),    # Set output duration explicitly
             '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
