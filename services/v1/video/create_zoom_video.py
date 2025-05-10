@@ -61,7 +61,7 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         # Define zoom based on frame number 'on' and total frames 'N'
         # Linearly interpolate between zoom_start and zoom_end over N frames
         # Escape single quotes for the shell/subprocess
-        zoom_formula = f'lerp({zoom_start},{zoom_end},on/N)'
+        zoom_formula = f'lerp({zoom_start},{zoom_end},on/{total_frames})'
 
         # Command to generate video with zoom effect using ffmpeg
         cmd = [
