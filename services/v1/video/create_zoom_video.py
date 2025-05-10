@@ -64,7 +64,7 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         # Build filter string: smooth zoom, fps, and scaling
         filter_str = (
             f"zoompan=z='if(eq(on,0),{zoom_start},zoom+{speed})':"
-            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},scale=1920:1080"
+            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},scale=3840:2160"
         )
 
         # Command to generate video with zoom effect using ffmpeg
@@ -76,8 +76,8 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
             '-t', str(duration),    # Set output duration explicitly
             '-c:v', 'libx264',
             '-pix_fmt', 'yuv420p',
-            '-crf', '23',
-            '-preset', 'medium',
+            '-crf', '18',
+            '-preset', 'slow',
             output_path
         ]
         
