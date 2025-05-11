@@ -70,7 +70,8 @@ logger = logging.getLogger(__name__)
             "minItems": 1
         },
         "webhook_url": {"type": "string", "format": "uri"},
-        "id": {"type": "string"}
+        "id": {"type": "string"},
+        "custom": {"type": "object"}
     },
     "required": ["cenas"],
     "additionalProperties": False
