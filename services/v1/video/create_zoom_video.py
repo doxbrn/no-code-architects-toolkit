@@ -68,8 +68,10 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         )
 
         # Command to generate video with zoom effect using ffmpeg
+        threads = os.cpu_count() or 1
         cmd = [
             'ffmpeg',
+            '-threads', str(threads),
             '-loop', '1',           # Loop a single image
             '-i', image_path,       # Input image
             '-vf', filter_str,
