@@ -56,24 +56,22 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         zoom_end = 1.15
     
     try:
-        # Handle custom overrides
+        # Apply custom overrides or defaults
         user_custom = custom or {}
-        # Zoom range and speed percentage
-        zoom_speed_pct = user_custom.get('zoom_speed', 100) / 100
-        # Frame rate and resolution
         fps = user_custom.get('fps', 30)
         resolution = user_custom.get('resolution', '3840:2160')
-        # Override zoom start/end if provided
         zoom_start = user_custom.get('zoom_start', zoom_start)
         zoom_end = user_custom.get('zoom_end', zoom_end)
-        # Calculate frames and per-frame speed
+        zoom_speed_pct = user_custom.get('zoom_speed', 100) / 100
+        # Calculate total frames and zoom delta
         total_frames = int(duration * fps)
-        speed = (zoom_end - zoom_start) * zoom_speed_pct / total_frames
-        # Build zoompan filter
+        zoom_delta = (zoom_end - zoom_start) * zoom_speed_pct
+        max_zoom = zoom_start + zoom_delta
+        # Build zoompan filter using linear interpolation
         filter_str = (
-            f"zoompan=z='if(eq(on,0),{zoom_start},zoom+{speed})':"
-            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},"
-            f"scale={resolution}"
+            f"zoompan=z='min({zoom_start}+{zoom_delta}*on/{total_frames},{max_zoom})':"
+            f"d={total_frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',"
+            f"fps={fps},scale={resolution}"
         )
 
         # Command to generate video with zoom effect using ffmpeg
@@ -252,9 +250,16 @@ def process_create_zoom_video(content_data, job_id):
             
             temp_files.extend([image_path, audio_path])
             
-            # Generate zoom video from image
+            # Generate zoom video from image, passing any custom settings
+            scene_custom = content_data.get('custom', {})
             zoom_video_path = os.path.join(temp_dir, f"{scene_id}_zoom.mp4")
-            generate_zoom_video_from_image(image_path, zoom_video_path, duration)
+            generate_zoom_video_from_image(
+                image_path,
+                zoom_video_path,
+                duration,
+                zoom_type=scene_custom.get('zoom_type', 'in'),
+                custom=scene_custom
+            )
             temp_files.append(zoom_video_path)
             
             # Combine zoom video with audio
