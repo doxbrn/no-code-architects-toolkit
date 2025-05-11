@@ -23,7 +23,7 @@ from config import LOCAL_STORAGE_PATH
 # Set up logging
 logger = logging.getLogger(__name__)
 
-def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type="in"):
+def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type="in", custom=None):
     """
     Generate a video with zoom effect from an image.
     
@@ -32,6 +32,7 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         output_path (str): Path for the output video
         duration (float): Duration of the video in seconds
         zoom_type (str): Type of zoom effect ("in" or "out")
+        custom (dict): Custom overrides for zoom and fps/resolution
         
     Returns:
         str: Path to the generated video
@@ -55,16 +56,24 @@ def generate_zoom_video_from_image(image_path, output_path, duration, zoom_type=
         zoom_end = 1.15
     
     try:
-        fps = 30
-        total_frames = int(duration * fps) # Ensure integer for duration
-
-        # Calculate zoom increment per frame for smooth and natural transition
-        speed = (zoom_end - zoom_start) / total_frames
-
-        # Build filter string: smooth zoom, fps, and scaling
+        # Handle custom overrides
+        user_custom = custom or {}
+        # Zoom range and speed percentage
+        zoom_speed_pct = user_custom.get('zoom_speed', 100) / 100
+        # Frame rate and resolution
+        fps = user_custom.get('fps', 30)
+        resolution = user_custom.get('resolution', '3840:2160')
+        # Override zoom start/end if provided
+        zoom_start = user_custom.get('zoom_start', zoom_start)
+        zoom_end = user_custom.get('zoom_end', zoom_end)
+        # Calculate frames and per-frame speed
+        total_frames = int(duration * fps)
+        speed = (zoom_end - zoom_start) * zoom_speed_pct / total_frames
+        # Build zoompan filter
         filter_str = (
             f"zoompan=z='if(eq(on,0),{zoom_start},zoom+{speed})':"
-            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},scale=3840:2160"
+            f"d=1:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={fps},"
+            f"scale={resolution}"
         )
 
         # Command to generate video with zoom effect using ffmpeg
