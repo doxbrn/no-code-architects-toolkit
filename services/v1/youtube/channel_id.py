@@ -4,15 +4,6 @@ import re
 from typing import Optional
 
 def get_channel_id_from_url(youtube_url: str) -> Optional[str]:
-    """
-    Fetches a YouTube page and extracts the channel ID.
-
-    Args:
-        youtube_url: The URL of the YouTube page (channel or video).
-
-    Returns:
-        The channel ID if found, otherwise None.
-    """
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -21,84 +12,37 @@ def get_channel_id_from_url(youtube_url: str) -> Optional[str]:
         )
     }
     try:
-        response = requests.get(youtube_url, headers=headers, timeout=10)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Attempt 1: Look for <meta itemprop="channelId" content="...">
-        meta_tag = soup.find('meta', itemprop='channelId')
-        if meta_tag and meta_tag.get('content'):
-            return meta_tag['content']
+        # Follow redirects to catch handle -> channel redirects
+        resp = requests.get(youtube_url, headers=headers, timeout=10, allow_redirects=True)
+        resp.raise_for_status()
+        final_url = resp.url
+        m = re.match(r".*?/channel/([A-Za-z0-9_\-]+)", final_url)
+        if m:
+            return m.group(1)
 
-        # Attempt 2: Look for channelId or externalId in ytInitialData
-        scripts = soup.find_all('script')
-        for script in scripts:
-            if script.string and 'ytInitialData' in script.string:
-                # Primary regex for channelId
-                match_channel_id = re.search(
-                    r'"channelId":"([a-zA-Z0-9_\-]+)"', 
-                    script.string
-                )
-                if match_channel_id:
-                    return match_channel_id.group(1)
-                
-                # Fallback for externalId
-                match_external_id = re.search(
-                    r'"externalId":"([a-zA-Z0-9_\-]+)"', 
-                    script.string
-                )
-                if match_external_id:
-                    return match_external_id.group(1)
-                
-                # Broader search within browseEndpoint for browseId (channelId)
-                browse_match = re.search(
-                    r'"browseEndpoint":{[^}]*"browseId":"([a-zA-Z0-9_\-]+)"'
-                    , script.string)
-                if browse_match:
-                    return browse_match.group(1)
+        soup = BeautifulSoup(resp.content, "html.parser")
 
-        # Attempt 3: Look for canonical URL pointing to the channel
-        canonical_link = soup.find('link', rel='canonical')
-        if canonical_link and canonical_link.get('href'):
-            href = canonical_link['href']
-            match_canonical = re.match(
-                r'https?://www\.youtube\.com/channel/([a-zA-Z0-9_\-]+)',
-                href
-            )
-            if match_canonical:
-                return match_canonical.group(1)
+        # 1) meta og:url fallback
+        og = soup.find("meta", property="og:url")
+        if og and "/channel/" in og.get("content", ""):
+            return og["content"].split("/channel/")[-1]
+
+        # 2) aggregate all JS for a broader regex search
+        all_js = "".join(script.string or "" for script in soup.find_all("script"))
+        match = re.search(r'"channelId":"(UC[0-9A-Za-z_\-]{22,})"', all_js)
+        if match:
+            return match.group(1)
+
+        # 3) canonical link (official channel pages)
+        can = soup.find("link", rel="canonical")
+        if can and "/channel/" in can.get("href", ""):
+            return can["href"].split("/channel/")[-1]
 
         return None
 
     except requests.RequestException as e:
-        # Log the error or handle it as per application's logging strategy
-        print(f"Error fetching URL {youtube_url}: {e}")
+        print(f"HTTP error fetching {youtube_url}: {e}")
         return None
     except Exception as e:
-        # Log the error or handle it
-        print(f"An error occurred while processing {youtube_url}: {e}")
+        print(f"Parsing error for {youtube_url}: {e}")
         return None
-
-if __name__ == '__main__':
-    # Test cases
-    test_urls = [
-        "https://www.youtube.com/channel/UC_x5XG1OV2P6uZZ5FSM9Ttw", # Google Developers (Channel URL)
-        "https://www.youtube.com/user/GoogleDevelopers", # Google Developers (Legacy user URL)
-        "https://www.youtube.com/@GoogleDevelopers", # Google Developers (Handle URL)
-        "https://www.youtube.com/watch?v=Y_2gXg_K26U", # A video from Google Developers
-        "https://www.youtube.com/watch?v=dQw4w9WgXcQ", # Rick Astley - Video URL
-        "https://www.youtube.com/@LinusTechTips", # Linus Tech Tips (Handle URL)
-        "https://www.youtube.com/c/LinusTechTips", # Linus Tech Tips (Legacy custom URL)
-        "https://www.youtube.com/madebygoogle", # Made by Google (Vanity URL, might resolve to /@madebygoogle)
-    ]
-    print("Running tests...")
-    for url in test_urls:
-        channel_id = get_channel_id_from_url(url)
-        print(f"URL: {url}\n  -> Channel ID: {channel_id}\n")
-
-    # Expected output (channel IDs can sometimes change or YouTube might alter their page structure):
-    # UC_x5XG1OV2P6uZZ5FSM9Ttw for Google Developers related URLs
-    # UCUYoUwYf5nKZDJD3s_22zYQ for Linus Tech Tips related URLs
-    # UC38IQsAvIsxxjztd_EJO2rQ for Rick Astley's video's channel
-    # UCQ16c6dtk2cpNK2E1nOahLg for MadeByGoogle 
