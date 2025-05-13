@@ -1,13 +1,7 @@
 # Corrected import path
 from services.v1.video.pexels_service import get_pexels_videos_for_duration, download_asset
-# Try importing the editor module directly
-import moviepy.editor as mpy
-# from moviepy.editor import (
-#     VideoFileClip,
-#     CompositeVideoClip,
-#     concatenate_videoclips
-# )
-from moviepy import vfx # Import vfx module directly
+# Updated imports for moviepy v2.x
+from moviepy import VideoFileClip, CompositeVideoClip, concatenate_videoclips, vfx
 import numpy as np
 import os
 
@@ -22,8 +16,7 @@ def chroma_key_video(
 ):
     """Applies chroma key effect, replacing background with Pexels videos."""
     
-    # Use mpy prefix
-    fg_clip = mpy.VideoFileClip(input_path)
+    fg_clip = VideoFileClip(input_path)
     fg_duration = fg_clip.duration
 
     print(f"Looking for background videos for '{pexels_term}' with total duration ~{fg_duration:.2f}s")
@@ -44,7 +37,7 @@ def chroma_key_video(
         bg_path = download_asset(url, filename)
         try:
             # Use mpy prefix
-            clip = mpy.VideoFileClip(bg_path)
+            clip = VideoFileClip(bg_path)
             # Ensure background matches foreground dimensions
             if clip.size != fg_clip.size:
                 print(f"Resizing background clip {i+1} to match foreground size {fg_clip.size}.")
@@ -78,8 +71,7 @@ def chroma_key_video(
     # Concatenate background clips
     # Using compose method with negative padding for crossfade effect
     print("Concatenating background clips...")
-    # Use mpy prefix
-    bg_concat = mpy.concatenate_videoclips(
+    bg_concat = concatenate_videoclips(
         bg_clips, method="compose", padding=-transition, bg_color=(0, 0, 0)
     ).subclip(0, fg_duration) # Trim to exact foreground duration
 
@@ -116,8 +108,7 @@ def chroma_key_video(
 
     # Composite the background and masked foreground
     print("Compositing final video...")
-    # Use mpy prefix
-    final_clip = mpy.CompositeVideoClip(
+    final_clip = CompositeVideoClip(
         [bg_concat, fg_masked.set_position(('center', 'center'))], # Center foreground
         size=fg_clip.size # Ensure final size matches input
     ).set_duration(fg_duration)

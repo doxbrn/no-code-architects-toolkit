@@ -22,4 +22,5 @@ beautifulsoup4
 isodate
 
 # Added for new video effects services
-moviepy>=1.0.3
+# Specify v2.x based on documentation and import errors
+moviepy~=2.1.0
