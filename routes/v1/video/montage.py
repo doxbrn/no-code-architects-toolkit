@@ -21,13 +21,13 @@ v1_video_montage_bp = Blueprint(
 
 # Define schema for the montage payload
 class MontagePayloadSchema(Schema):
-    pexels_query = fields.String(required=True, description="Search query for Pexels videos.")
-    num_clips = fields.Integer(missing=5, description="Number of video clips to include.")
-    clip_duration = fields.Integer(missing=5, description="Duration of each clip in seconds.")
-    output_filename = fields.String(required=True, description="Filename for the output montage video.")
-    webhook_url = fields.Url(required=False, description="Optional URL for completion notification.")
-    transition_type = fields.String(missing="fade", enum=["fade", "slide", "wipe"], description="Transition type between clips.")
-    audio_track_url = fields.Url(required=False, description="URL of an audio track to add to the montage.")
+    pexels_query = fields.String(required=True)
+    num_clips = fields.Integer(missing=5)
+    clip_duration = fields.Integer(missing=5)
+    output_filename = fields.String(required=True)
+    webhook_url = fields.Url(required=False)
+    transition_type = fields.String(missing="fade", enum=["fade", "slide", "wipe"])
+    audio_track_url = fields.Url(required=False)
 
 @v1_video_montage_bp.route("/montage", methods=["POST"])
 @authenticate
