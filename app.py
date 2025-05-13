@@ -240,7 +240,6 @@ def create_app():
     from routes.v1.youtube.channel_id import youtube_channel_id_bp
     from routes.v1.youtube.channel_videos import youtube_channel_videos_bp
     from routes.v1.video.create_zoom_video import v1_video_create_zoom_video_bp
-    from routes.v1.video.effects import v1_video_effects_bp
 
     app.register_blueprint(v1_ffmpeg_compose_bp)
     app.register_blueprint(v1_media_transcribe_bp)
@@ -257,6 +256,7 @@ def create_app():
     app.register_blueprint(v1_toolkit_test_bp)
     app.register_blueprint(v1_toolkit_auth_bp)
     app.register_blueprint(v1_code_execute_bp)
+    app.register_blueprint(v1_s3_upload_bp)
     app.register_blueprint(v1_video_thumbnail_bp)
     app.register_blueprint(v1_media_download_bp)
     app.register_blueprint(v1_media_convert_bp)
@@ -271,8 +271,6 @@ def create_app():
     app.register_blueprint(youtube_channel_id_bp)
     app.register_blueprint(youtube_channel_videos_bp)
     app.register_blueprint(v1_video_create_zoom_video_bp)
-    app.register_blueprint(v1_s3_upload_bp)
-    app.register_blueprint(v1_video_effects_bp)
 
     return app
 
