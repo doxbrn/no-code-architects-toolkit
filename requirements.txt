@@ -1,12 +1,12 @@
 Flask
-Werkzeug
+Werkzeug==3.0.3
 requests
 ffmpeg-python
 openai-whisper
 gunicorn
 APScheduler
 srt
-numpy
+numpy>=1.18.0
 torch
 google-auth
 google-auth-oauthlib
@@ -20,3 +20,6 @@ matplotlib
 yt-dlp
 beautifulsoup4
 isodate
+
+# Added for new video effects services
+moviepy>=1.0.3
