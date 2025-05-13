@@ -3,9 +3,12 @@ import logging
 import os
 import uuid
 
+# Import utils EXCEPT authenticate
 from app_utils import (
-    authenticate, validate_payload, queue_task_wrapper, get_env_var_or_default
+    validate_payload, queue_task_wrapper, get_env_var_or_default
 )
+# Import authenticate from its correct location
+from services.authentication import authenticate
 from services.v1.video.montage_service import pexels_montage
 
 logger = logging.getLogger(__name__)
