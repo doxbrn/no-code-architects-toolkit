@@ -2,14 +2,13 @@ from flask import Blueprint, request, jsonify
 import logging
 import os
 import uuid
+from marshmallow import Schema, fields, ValidationError
 
 # Import utils EXCEPT authenticate
-from app_utils import (
-    validate_payload, queue_task_wrapper, get_env_var_or_default
-)
+from app_utils import queue_task_wrapper, validate_payload
 # Import authenticate from its correct location
 from services.authentication import authenticate
-from services.v1.video.chroma_service import chroma_key_video
+from services.v1.video.chroma_service import chroma_key_video, apply_chroma_key_async
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +64,13 @@ CHROMA_KEY_SCHEMA = {
     "required": ["input_path", "pexels_term", "output_filename"]
 }
 
+# Get PEXELS_API_KEY from environment variables
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+if not PEXELS_API_KEY:
+    # TODO: Consider how to handle this error gracefully in a Flask app
+    # For now, raising an error will prevent the app from starting if the key is missing
+    raise ValueError("PEXELS_API_KEY environment variable not set.")
+
 @v1_video_chroma_key_bp.route('/v1/video/chroma_key', methods=['POST'])
 @authenticate
 @validate_payload(CHROMA_KEY_SCHEMA)
@@ -79,14 +85,14 @@ def queue_chroma_key_task():
     # A more robust solution would download URL inputs first.
     local_input_path = payload["input_path"]
     if not os.path.exists(local_input_path):
-         # Basic check, might need volume mapping understanding
-        if not local_input_path.startswith(get_env_var_or_default("STORAGE_BASE_PATH", "/app/storage")):
-             logger.error(f"Job {job_id}: Input path '{local_input_path}' does not seem to be in the accessible storage area.")
-             # Consider making this a hard error if paths must be local
-             # return jsonify({"message": "Input path must be accessible within the service storage"}), 400
+        # Basic check, might need volume mapping understanding
+        if not local_input_path.startswith(os.environ.get("STORAGE_BASE_PATH", "/app/storage")):
+            logger.error(f"Job {job_id}: Input path '{local_input_path}' does not seem to be in the accessible storage area.")
+            # Consider making this a hard error if paths must be local
+            # return jsonify({"message": "Input path must be accessible within the service storage"}), 400
 
     # --- Output Path --- Generate full output path in storage
-    storage_base = get_env_var_or_default("STORAGE_BASE_PATH", "/app/storage")
+    storage_base = os.environ.get("STORAGE_BASE_PATH", "/app/storage")
     output_dir = os.path.join(storage_base, job_id)
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, payload["output_filename"])

@@ -1,138 +1,76 @@
-from flask import Blueprint, request, jsonify
-import logging
 import os
+import logging
 import uuid
-
-# Import utils EXCEPT authenticate
-from app_utils import (
-    validate_payload, queue_task_wrapper, get_env_var_or_default
-)
-# Import authenticate from its correct location
+from flask import Blueprint, request, jsonify
+from marshmallow import Schema, fields, ValidationError
+from app_utils import queue_task_wrapper, validate_payload
 from services.authentication import authenticate
-from services.v1.video.montage_service import pexels_montage
+from services.v1.video.montage_service import create_montage_async
 
 logger = logging.getLogger(__name__)
 
-v1_video_montage_bp = Blueprint('v1_video_montage_bp', __name__)
+# Get PEXELS_API_KEY from environment variables
+PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY")
+if not PEXELS_API_KEY:
+    # TODO: Consider how to handle this error gracefully in a Flask app
+    raise ValueError("PEXELS_API_KEY environment variable not set.")
+
+v1_video_montage_bp = Blueprint(
+    "v1_video_montage", __name__, url_prefix="/v1/video"
+)
 
 # Define schema for the montage payload
-MONTAGE_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "pexels_term": {
-            "type": "string",
-            "description": "Search term for Pexels videos."
-        },
-        "n_videos": {
-            "type": "integer",
-            "minimum": 1,
-            "maximum": 20,
-            "description": "Number of videos for the montage (1-20)."
-        },
-        "output_filename": {
-            "type": "string",
-            "description": "Desired filename for output (e.g., my_montage.mp4)."
-        },
-        "webhook_url": {
-            "type": "string",
-            "format": "uri",
-            "description": "Optional URL for completion notification."
-        },
-        "min_duration": {
-            "type": "integer",
-            "minimum": 3,
-            "default": 5,
-            "description": "Min duration for individual clips."
-        },
-        "max_duration": {
-            "type": "integer",
-            "minimum": 5,
-            "default": 30,
-            "description": "Max duration for individual clips."
-        },
-        "transition": {
-            "type": "number",
-            "minimum": 0,
-            "default": 1.5,
-            "description": "Fade transition duration (seconds)."
-        },
-        "target_fps": {
-            "type": "integer",
-            "enum": [24, 25, 30],
-            "default": 24,
-            "description": "Output FPS (24, 25, or 30)."
-        },
-        "target_width": {
-            "type": "integer",
-            "enum": [1280, 1920, 2560, 3840],
-            "default": 1920,
-            "description": "Output width."
-        },
-        "target_height": {
-            "type": "integer",
-            "enum": [720, 1080, 1440, 2160],
-            "default": 1080,
-            "description": "Output height."
-        },
-        "apply_color_correction": {
-            "type": "boolean",
-            "default": True,
-            "description": "Apply subtle color correction."
-        }
-    },
-    "required": ["pexels_term", "n_videos", "output_filename"]
-}
+class MontagePayloadSchema(Schema):
+    pexels_query = fields.String(required=True, description="Search query for Pexels videos.")
+    num_clips = fields.Integer(missing=5, description="Number of video clips to include.")
+    clip_duration = fields.Integer(missing=5, description="Duration of each clip in seconds.")
+    output_filename = fields.String(required=True, description="Filename for the output montage video.")
+    webhook_url = fields.Url(required=False, description="Optional URL for completion notification.")
+    transition_type = fields.String(missing="fade", enum=["fade", "slide", "wipe"], description="Transition type between clips.")
+    audio_track_url = fields.Url(required=False, description="URL of an audio track to add to the montage.")
 
-@v1_video_montage_bp.route('/v1/video/montage', methods=['POST'])
+@v1_video_montage_bp.route("/montage", methods=["POST"])
 @authenticate
-@validate_payload(MONTAGE_SCHEMA)
-def queue_montage_task():
-    """Queues a background task to create a Pexels video montage."""
+@validate_payload(MontagePayloadSchema())
+def handle_montage_request():
     payload = request.json
     job_id = str(uuid.uuid4())
-    logger.info(f"Job {job_id}: Received montage request")
+    logger.info(f"Job {job_id}: Received montage request with payload: {payload}")
 
     # --- Output Path --- Generate full output path in storage
-    storage_base = get_env_var_or_default("STORAGE_BASE_PATH", "/app/storage")
+    # Use os.environ.get for STORAGE_BASE_PATH
+    storage_base = os.environ.get("STORAGE_BASE_PATH", "/app/storage")
     output_dir = os.path.join(storage_base, job_id)
     os.makedirs(output_dir, exist_ok=True)
-    output_path = os.path.join(output_dir, payload["output_filename"])
+    # Construct a relative path for the output file to be stored in job details
+    output_filename = payload.get("output_filename", f"{job_id}_montage.mp4")
+    # Ensure the filename from payload is used if provided, otherwise generate one.
+    # The schema requires output_filename, so it should always be present.
+    relative_output_path = os.path.join(job_id, output_filename) # Path relative to storage_base
+    full_output_path = os.path.join(output_dir, output_filename) # Absolute path
 
-    # --- Task Arguments --- Prepare arguments for the service function
-    # Combine width/height defaults from schema
-    default_width = MONTAGE_SCHEMA["properties"]["target_width"]["default"]
-    default_height = MONTAGE_SCHEMA["properties"]["target_height"]["default"]
-    target_size = (
-        payload.get("target_width", default_width),
-        payload.get("target_height", default_height)
-    )
-
-    # Extract defaults from schema cleanly
-    min_dur_def = MONTAGE_SCHEMA["properties"]["min_duration"]["default"]
-    max_dur_def = MONTAGE_SCHEMA["properties"]["max_duration"]["default"]
-    trans_def = MONTAGE_SCHEMA["properties"]["transition"]["default"]
-    fps_def = MONTAGE_SCHEMA["properties"]["target_fps"]["default"]
-    color_def = MONTAGE_SCHEMA["properties"]["apply_color_correction"]["default"]
 
     task_args = {
-        "pexels_term": payload["pexels_term"],
-        "n_videos": payload["n_videos"],
-        "output_path": output_path,
-        "min_duration": payload.get("min_duration", min_dur_def),
-        "max_duration": payload.get("max_duration", max_dur_def),
-        "transition": payload.get("transition", trans_def),
-        "target_fps": payload.get("target_fps", fps_def),
-        "target_size": target_size,
-        "apply_color_correction": payload.get("apply_color_correction", color_def)
+        "pexels_query": payload["pexels_query"],
+        "num_clips": payload.get("num_clips", 5),
+        "clip_duration": payload.get("clip_duration", 5),
+        "output_path": full_output_path, # Use full_output_path
+        "transition_type": payload.get("transition_type", "fade"),
+        "audio_track_url": payload.get("audio_track_url"),
+        "pexels_api_key": PEXELS_API_KEY, # Pass the key to the service
     }
 
-    # --- Queue Task --- Use the wrapper
+    logger.info(f"Job {job_id}: Queuing montage task with args: {task_args}")
+
     result = queue_task_wrapper(
         job_id,
-        pexels_montage,  # The service function
+        create_montage_async, # Target function for the async task
         task_args,
         payload.get("webhook_url"),
-        request.path
+        request.path,
+        # Pass the relative path for storage in job details
+        output_file_path_relative=relative_output_path
     )
-
+    
+    logger.info(f"Job {job_id}: Task queued. Response: {result}")
     return jsonify(result), 202 
