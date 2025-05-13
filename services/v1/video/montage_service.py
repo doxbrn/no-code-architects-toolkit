@@ -1,6 +1,8 @@
 # Corrected import path
 from services.v1.video.pexels_service import get_pexels_videos_for_duration, download_asset
-from moviepy.editor import VideoFileClip, concatenate_videoclips
+# Try importing the editor module directly
+import moviepy.editor as mpy
+# from moviepy.editor import VideoFileClip, concatenate_videoclips
 from moviepy import vfx # Import vfx module directly
 import os
 
@@ -25,7 +27,8 @@ def pexels_montage(pexels_term, n_videos, output_path, target_resolution=(1920, 
         filename = f"montage_{pexels_term.replace(' ', '_')}_{i}.mp4"
         path = download_asset(url, filename)
         try:
-            clip = VideoFileClip(path)
+            # Use mpy prefix
+            clip = mpy.VideoFileClip(path)
             # Resize to target resolution (e.g., 1920x1080)
             clip = clip.resize(target_resolution)
             # Apply effects: slight color boost, fade in/out
@@ -47,7 +50,8 @@ def pexels_montage(pexels_term, n_videos, output_path, target_resolution=(1920, 
 
     print("Concatenating montage clips...")
     # Concatenate with crossfade effect
-    final_montage = concatenate_videoclips(
+    # Use mpy prefix
+    final_montage = mpy.concatenate_videoclips(
         clips, method="compose", padding=-1.5, bg_color=(0, 0, 0)
     )
 

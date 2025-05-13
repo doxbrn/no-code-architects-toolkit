@@ -1,11 +1,12 @@
 # Corrected import path
 from services.v1.video.pexels_service import get_pexels_videos_for_duration, download_asset
-from moviepy.editor import (
-    VideoFileClip,
-    CompositeVideoClip,
-    concatenate_videoclips
-    # Removed vfx import as it's used qualifiedly
-)
+# Try importing the editor module directly
+import moviepy.editor as mpy
+# from moviepy.editor import (
+#     VideoFileClip,
+#     CompositeVideoClip,
+#     concatenate_videoclips
+# )
 from moviepy import vfx # Import vfx module directly
 import numpy as np
 import os
@@ -21,7 +22,8 @@ def chroma_key_video(
 ):
     """Applies chroma key effect, replacing background with Pexels videos."""
     
-    fg_clip = VideoFileClip(input_path)
+    # Use mpy prefix
+    fg_clip = mpy.VideoFileClip(input_path)
     fg_duration = fg_clip.duration
 
     print(f"Looking for background videos for '{pexels_term}' with total duration ~{fg_duration:.2f}s")
@@ -41,7 +43,8 @@ def chroma_key_video(
         filename = f"chroma_bg_{pexels_term.replace(' ', '_')}_{i}.mp4"
         bg_path = download_asset(url, filename)
         try:
-            clip = VideoFileClip(bg_path)
+            # Use mpy prefix
+            clip = mpy.VideoFileClip(bg_path)
             # Ensure background matches foreground dimensions
             if clip.size != fg_clip.size:
                 print(f"Resizing background clip {i+1} to match foreground size {fg_clip.size}.")
@@ -75,7 +78,8 @@ def chroma_key_video(
     # Concatenate background clips
     # Using compose method with negative padding for crossfade effect
     print("Concatenating background clips...")
-    bg_concat = concatenate_videoclips(
+    # Use mpy prefix
+    bg_concat = mpy.concatenate_videoclips(
         bg_clips, method="compose", padding=-transition, bg_color=(0, 0, 0)
     ).subclip(0, fg_duration) # Trim to exact foreground duration
 
@@ -101,16 +105,19 @@ def chroma_key_video(
 
     print("Generating chroma key mask...")
     # Apply the masking function to the foreground clip
+    # Use mpy prefix (fl_image is a method of the clip object, no change needed here)
     mask_clip = fg_clip.fl_image(chroma_mask_func)
     mask_clip = mask_clip.set_duration(fg_clip.duration)
     mask_clip.is_mask = True # Tell moviepy this is a mask
 
     print("Applying mask to foreground...")
+    # Use mpy prefix (set_mask is a method)
     fg_masked = fg_clip.set_mask(mask_clip)
 
     # Composite the background and masked foreground
     print("Compositing final video...")
-    final_clip = CompositeVideoClip(
+    # Use mpy prefix
+    final_clip = mpy.CompositeVideoClip(
         [bg_concat, fg_masked.set_position(('center', 'center'))], # Center foreground
         size=fg_clip.size # Ensure final size matches input
     ).set_duration(fg_duration)
