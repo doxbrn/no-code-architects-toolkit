@@ -14,7 +14,7 @@ CHANNEL_VIDEOS_SCHEMA = {
     "required": ["channel_id"],
     "properties": {
         "channel_id": {"type": "string"},
-        "max_results": {"type": "integer", "minimum": 1, "maximum": 500},
+        "max_results": {"type": "integer", "minimum": 1, "maximum": 50000},
         "order_by": {"type": "string", "enum": ["viewCount", "date", "rating", "title"]}
     }
 }
@@ -36,13 +36,10 @@ def handle_get_channel_videos():
         return jsonify({"error": "'channel_id' é obrigatório"}), 400
 
     current_app.logger.info(
-        f"Requisição recebida para obter vídeos do canal ID: {channel_id}"
+        f"Requisição recebida para obter vídeos do canal ID: {channel_id}, max_results: {max_results}"
     )
 
     try:
-        # Limitando max_results a 500 para evitar sobrecarga
-        max_results = min(max_results, 500)
-        
         # Chamar o serviço para obter os vídeos
         result = get_videos_by_channel_id(
             channel_id=channel_id, 
