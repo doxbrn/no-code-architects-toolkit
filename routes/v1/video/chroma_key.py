@@ -2,13 +2,13 @@ from flask import Blueprint, request, jsonify
 import logging
 import os
 import uuid
-from marshmallow import Schema, fields, ValidationError
+# from marshmallow import Schema, fields, ValidationError # Removed unused imports
 
 # Import utils EXCEPT authenticate
 from app_utils import queue_task_wrapper, validate_payload
 # Import authenticate from its correct location
 from services.authentication import authenticate
-from services.v1.video.chroma_service import chroma_key_video, apply_chroma_key_async
+from services.v1.video.chroma_service import chroma_key_video
 
 logger = logging.getLogger(__name__)
 
