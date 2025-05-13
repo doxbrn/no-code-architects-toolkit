@@ -11,6 +11,7 @@ import json
 from services.v1.video.chroma_service import chroma_key_video
 from services.v1.video.montage_service import pexels_montage
 from services.v1.video.pexels_service import PEXELS_API_KEY
+from services.s3_toolkit import upload_to_s3 # Import the S3 upload function
 
 # Define a Blueprint
 v1_video_effects_bp = Blueprint(
@@ -127,9 +128,20 @@ def api_chroma_key_video():
 
 @v1_video_effects_bp.route('/pexels_montage', methods=['POST'])
 def api_pexels_montage():
-    """Create Video Montage from Pexels using Flask."""
+    """Create Video Montage from Pexels, upload to S3, and return S3 URL."""
     if not PEXELS_API_KEY:
         return jsonify({"error": "Pexels API key is not configured on the server."}), 500
+    
+    # Get S3 config from environment (ensure these are set)
+    s3_endpoint_url = os.getenv('S3_ENDPOINT_URL')
+    s3_access_key = os.getenv('S3_ACCESS_KEY')
+    s3_secret_key = os.getenv('S3_SECRET_KEY')
+    s3_bucket_name = os.getenv('S3_BUCKET_NAME')
+    s3_region = os.getenv('S3_REGION', '') # Region might be optional depending on S3 provider
+
+    if not all([s3_endpoint_url, s3_access_key, s3_secret_key, s3_bucket_name]):
+        print("ERROR: Missing required S3 environment variables (URL, KEY, SECRET, BUCKET)")
+        return jsonify({"error": "S3 storage is not configured correctly on the server."}), 500
 
     if not request.is_json:
         return jsonify({"error": "Request must be JSON."}), 400
@@ -143,10 +155,12 @@ def api_pexels_montage():
         return jsonify({"error": "Missing or invalid required field: 'n_videos' (must be a positive integer)."}), 400
 
     temp_dir = None # Initialize
+    output_path = None # Initialize output_path
     try:
         temp_dir = tempfile.mkdtemp()
-        output_filename = f"montage_output_{uuid.uuid4()}.mp4"
-        output_path = os.path.join(temp_dir, output_filename)
+        # Keep track of the intended output filename for S3 upload object name
+        output_filename_base = f"montage_output_{uuid.uuid4()}.mp4"
+        output_path = os.path.join(temp_dir, output_filename_base)
         
         target_width = payload.get('target_width', 1920)
         target_height = payload.get('target_height', 1080)
@@ -157,7 +171,7 @@ def api_pexels_montage():
         print(f"Pexels Montage Request (Flask): Output to {output_path}")
         print(f"Payload: {payload}")
 
-        # Call the service function
+        # Call the service function to generate the montage locally
         pexels_montage(
             pexels_term=payload['pexels_term'],
             n_videos=payload['n_videos'],
@@ -168,19 +182,38 @@ def api_pexels_montage():
         if not os.path.exists(output_path):
             raise RuntimeError("Pexels montage processing failed to produce an output file.")
 
-        # Return the processed video
-        return send_file(
-            output_path,
-            mimetype='video/mp4',
-            as_attachment=False, 
-            download_name=output_filename,
+        # Upload the generated file to S3
+        print(f"Uploading {output_path} to S3 bucket {s3_bucket_name}...")
+        s3_file_url = upload_to_s3(
+            file_path=output_path,
+            s3_url=s3_endpoint_url,
+            access_key=s3_access_key,
+            secret_key=s3_secret_key,
+            bucket_name=s3_bucket_name,
+            region=s3_region
         )
+        print(f"Successfully uploaded montage to S3: {s3_file_url}")
+
+        # Return the S3 URL instead of sending the file
+        return jsonify({
+            "message": "Montage created and uploaded successfully.",
+            "s3_url": s3_file_url
+        }), 200
 
     except RuntimeError as e:
         print(f"Runtime error in /pexels_montage: {e}\n{traceback.format_exc()}")
+        # Ensure output_path is known for potential partial file cleanup
+        if output_path and os.path.exists(output_path):
+             try: os.remove(output_path) 
+             except OSError: pass
         return jsonify({"error": str(e)}), 500
     except Exception as e:
         print(f"Unexpected error in /pexels_montage: {e}\n{traceback.format_exc()}")
+        # Ensure output_path is known for potential partial file cleanup
+        if output_path and os.path.exists(output_path):
+             try: os.remove(output_path) 
+             except OSError: pass
         return jsonify({"error": f"An unexpected server error occurred: {str(e)}"}), 500
     finally:
+        # Cleanup the whole temp directory, including any downloaded clips or the final output if it wasn't cleaned in error handling
         cleanup_dir(temp_dir) 

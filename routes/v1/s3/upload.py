@@ -15,13 +15,10 @@
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
 
-
-from flask import Blueprint, request, jsonify
+from flask import Blueprint
 from services.authentication import authenticate
 from app_utils import validate_payload, queue_task_wrapper
 from services.v1.s3.upload import stream_upload_to_s3
-import os
-import json
 import logging
 
 logger = logging.getLogger(__name__)

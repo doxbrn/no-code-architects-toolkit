@@ -28,7 +28,7 @@ def pexels_montage(pexels_term, n_videos, output_path, target_resolution=(1920, 
             # Use updated import
             clip = VideoFileClip(path)
             # Resize to target resolution (e.g., 1920x1080)
-            clip = clip.resize(target_resolution)
+            clip = clip.fx(vfx.resize, newsize=target_resolution)
             # Apply effects: slight color boost, fade in/out
             clip = clip.fx(vfx.colorx, 1.1)
             clip = clip.fx(vfx.fadein, 1.5)
