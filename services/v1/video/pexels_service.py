@@ -204,7 +204,7 @@ def download_asset(url, filename):
     os.makedirs(download_dir, exist_ok=True)
 
     # Sanitize filename slightly (replace common problematic chars)
-    safe_filename = filename.replace("/", "_").replace("\", "_").replace(":", "_").replace("*", "_").replace("?", "_").replace(""", "_").replace("<", "_").replace(">", "_").replace("|", "_")
+    safe_filename = filename.replace("/", "_").replace("\\", "_").replace(":", "_").replace("*", "_").replace("?", "_").replace('"', "_").replace("<", "_").replace(">", "_").replace("|", "_")
     path = os.path.join(download_dir, safe_filename)
 
     if os.path.exists(path):
