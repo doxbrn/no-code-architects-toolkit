@@ -240,9 +240,6 @@ def create_app():
     from routes.v1.youtube.channel_id import youtube_channel_id_bp
     from routes.v1.youtube.channel_videos import youtube_channel_videos_bp
     from routes.v1.video.create_zoom_video import v1_video_create_zoom_video_bp
-    # Add new imports for chroma key and montage
-    from routes.v1.video.chroma_key import v1_video_chroma_key_bp
-    from routes.v1.video.montage import v1_video_montage_bp
 
     app.register_blueprint(v1_ffmpeg_compose_bp)
     app.register_blueprint(v1_media_transcribe_bp)
@@ -274,9 +271,6 @@ def create_app():
     app.register_blueprint(youtube_channel_id_bp)
     app.register_blueprint(youtube_channel_videos_bp)
     app.register_blueprint(v1_video_create_zoom_video_bp)
-    # Register new blueprints
-    app.register_blueprint(v1_video_chroma_key_bp)
-    app.register_blueprint(v1_video_montage_bp)
 
     return app
 

@@ -20,6 +20,3 @@ matplotlib
 yt-dlp
 beautifulsoup4
 isodate
-python-dotenv
-moviepy>=1.0.3 # Latest as of writing, adjust if needed
-marshmallow # Added for schema validation
