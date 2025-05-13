@@ -96,12 +96,13 @@ def get_videos_by_channel_id(
         page_count = 0
         total_fetched_ids_count = 0
         
+        # Calculate the number of pages needed based on max_results (50 items per page)
         max_pages_to_query = (max_results + 49) // 50
-        max_pages_to_query = min(max_pages_to_query, 10) # Limit to 10 pages (500 videos) as a safeguard
 
         logger.info(
-            f"Iniciando busca de vídeos da playlist de uploads ({uploads_playlist_id}) "
-            f"para o canal {channel_id}. Max results: {max_results}, Max pages: {max_pages_to_query}"
+            f"Iniciando busca de vídeos (playlist: {uploads_playlist_id}) "
+            f"para canal {channel_id}. Max results: {max_results}, "
+            f"Max pages calculadas: {max_pages_to_query}"
         )
 
         while total_fetched_ids_count < max_results and page_count < max_pages_to_query:
