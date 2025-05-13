@@ -2,10 +2,10 @@ import os
 import logging
 import uuid
 from flask import Blueprint, request, jsonify
-from marshmallow import Schema, fields, ValidationError
+from marshmallow import Schema, fields
 from app_utils import queue_task_wrapper, validate_payload
 from services.authentication import authenticate
-from services.v1.video.montage_service import create_montage_async
+from services.v1.video.montage_service import pexels_montage
 
 logger = logging.getLogger(__name__)
 
@@ -51,24 +51,25 @@ def handle_montage_request():
 
 
     task_args = {
-        "pexels_query": payload["pexels_query"],
-        "num_clips": payload.get("num_clips", 5),
-        "clip_duration": payload.get("clip_duration", 5),
-        "output_path": full_output_path, # Use full_output_path
-        "transition_type": payload.get("transition_type", "fade"),
-        "audio_track_url": payload.get("audio_track_url"),
-        "pexels_api_key": PEXELS_API_KEY, # Pass the key to the service
+        "pexels_term": payload["pexels_query"],
+        "n_videos": payload.get("num_clips", 5),
+        "min_duration": payload.get("clip_duration", 5),
+        "max_duration": payload.get("clip_duration", 5),
+        "output_path": full_output_path,
+        "transition": 1.5,
+        "target_fps": payload.get("target_fps", 24),
+        "target_size": payload.get("target_size", (1920, 1080)),
+        "apply_color_correction": payload.get("apply_color_correction", True)
     }
 
     logger.info(f"Job {job_id}: Queuing montage task with args: {task_args}")
 
     result = queue_task_wrapper(
         job_id,
-        create_montage_async, # Target function for the async task
+        pexels_montage,
         task_args,
         payload.get("webhook_url"),
         request.path,
-        # Pass the relative path for storage in job details
         output_file_path_relative=relative_output_path
     )
     
