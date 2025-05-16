@@ -14,7 +14,7 @@
 # with this program; if not, write to the Free Software Foundation, Inc.,
 # 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request
 from services.authentication import authenticate
 from app_utils import queue_task_wrapper
 from services.v1.s3.upload import upload_fileobj_to_s3
@@ -30,15 +30,17 @@ v1_s3_upload_binary_bp = Blueprint('v1_s3_upload_binary', __name__)
 def s3_upload_binary_endpoint(job_id, data=None):
     try:
         if 'file' not in request.files:
-            return jsonify({'error': 'No file part in the request'}), 400
+            return {'error': 'No file part in the request'}, "/v1/s3/upload-binary", 400
         file = request.files['file']
         filename = request.form.get('filename', file.filename)
         make_public = request.form.get('public', 'false').lower() == 'true'
 
-        logger.info(f"Job {job_id}: Starting S3 binary upload for {filename}")
+        logger.info(
+            f"Job {job_id}: Starting S3 binary upload for {filename}"
+        )
         result = upload_fileobj_to_s3(file, filename, make_public)
         logger.info(f"Job {job_id}: Successfully uploaded binary to S3")
-        return jsonify(result), 200
+        return result, "/v1/s3/upload-binary", 200
     except Exception as e:
         logger.error(f"Job {job_id}: Error uploading binary to S3 - {str(e)}")
-        return jsonify({'error': str(e)}), 500 
+        return {'error': str(e)}, "/v1/s3/upload-binary", 500 
